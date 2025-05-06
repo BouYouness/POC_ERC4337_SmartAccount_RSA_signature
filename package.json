@@ -4,13 +4,18 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "compile": "hardhat compile",
+    "deploy": "hardhat run scripts/VerifyRSA.ts --network localhost",
+    "test": "hardhat test"
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
-    "hardhat": "^2.23.0"
+    "@types/node": "^22.15.3",
+    "hardhat": "^2.23.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
   },
   "dependencies": {
     "@account-abstraction/contracts": "^0.8.0"

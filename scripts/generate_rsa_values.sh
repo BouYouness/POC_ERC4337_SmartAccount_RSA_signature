@@ -8,7 +8,7 @@ openssl genpkey -algorithm RSA -out private_key.pem -pkeyopt rsa_keygen_bits:204
 openssl rsa -in private_key.pem -pubout -out public_key.pem > /dev/null 2>&1
 
 # Step 2: Prepare message
-echo -n "POC_RSA" > message.txt
+echo -n "how you doing?" > message.txt
 
 # Step 3: Hash the message
 openssl dgst -sha256 -binary message.txt > hash.bin
