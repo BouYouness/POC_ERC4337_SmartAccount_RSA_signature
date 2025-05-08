@@ -30,9 +30,8 @@ exponent="010001"  # 65537 in hex
 
 # Print values 
 
-echo "*******"
-echo "const signature = \"0x$signature\";"
-echo "const exponent = \"0x$exponent\";"
-echo "const modulus = \"0x$modulus\";"
-echo "const expectedHash = \"0x$expectedHash\";"
-echo "*******"
+echo "signature=0x$signature"
+echo "exponent=0x$exponent"
+echo "modulus=0x$modulus"
+echo "expectedHash=0x$expectedHash"
+
