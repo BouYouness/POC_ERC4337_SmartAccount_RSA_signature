@@ -34,7 +34,7 @@ After deploying your RSA Verifier contract and generating the RSA values, you ca
 
    ```
    chmod +x scripts/generate_rsa_values.sh
-   ../scripts/generate_rsa_values.sh
+   ./scripts/generate_rsa_values.sh
    ```
 4. Copy the outputs signature, modulus, and expected hash and past them in  test script.
 
