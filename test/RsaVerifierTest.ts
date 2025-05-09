@@ -1,9 +1,10 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { execSync } from "child_process";
+import { createSign, generateKeyPairSync } from "crypto";
 import { sha256 } from "@ethersproject/sha2";
 import { toUtf8Bytes } from "@ethersproject/strings";
-import { getBytes } from "ethers";
+import { getBytes, hexlify } from "ethers";
+import forge from "node-forge";
 
 describe("RSAVerifier", function () {
   let verifier: any;
@@ -15,26 +16,19 @@ describe("RSAVerifier", function () {
     expectedHash: string;
   };
 
-  function parseRSAOutput(output: string): {
-    signature: string;
-    modulus: string;
-    exponent: string;
-    expectedHash: string;
+  // Helper function to extract modulus and exponent
+  function extractModulus_Exponent(pemPublicKey: string): {
+    modulus: Buffer;
+    exponent: Buffer;
   } {
-    const lines = output.trim().split("\n");
-    const result: { [key: string]: string } = {};
-    for (const line of lines) {
-      const [key, value] = line.split("=");
-      if (key && value) {
-        result[key.trim()] = value.trim();
-      }
-    }
-    return {
-      signature: result.signature,
-      modulus: result.modulus,
-      exponent: result.exponent,
-      expectedHash: result.expectedHash,
-    };
+    const forgePublicKey = forge.pki.publicKeyFromPem(pemPublicKey);
+    const nBytes = forge.util.hexToBytes(forgePublicKey.n.toString(16));
+    const eBytes = forge.util.hexToBytes(forgePublicKey.e.toString(16));
+
+    const modulus = Buffer.from(nBytes, "binary");
+    const exponent = Buffer.from(eBytes, "binary");
+
+    return { modulus, exponent };
   }
 
   before(async () => {
@@ -42,9 +36,39 @@ describe("RSAVerifier", function () {
     verifier = await RSAVerifierFactory.deploy();
     await verifier.waitForDeployment();
 
-    const outputBuffer = execSync("./scripts/generate_rsa_values.sh", { shell: "bash" });
-    const outputString = outputBuffer.toString();
-    rsaValues = parseRSAOutput(outputString);
+    // Generate RSA key pair
+    const { publicKey, privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      publicExponent: 0x10001, // 65537
+      publicKeyEncoding: {
+        type: "pkcs1",
+        format: "pem",
+      },
+      privateKeyEncoding: {
+        type: "pkcs1",
+        format: "pem",
+      },
+    });
+
+    // Message for signing
+    const message = "hi man";
+    const expectedHash = sha256(toUtf8Bytes(message));
+
+    // Create our signature
+    const signer = createSign("RSA-SHA256");
+    signer.update(message);
+    signer.end();
+    const signatureBuffer = signer.sign(privateKey);
+
+    // Extract modulus and exponent using the helper function 
+    const { modulus, exponent } = extractModulus_Exponent(publicKey);
+
+    rsaValues = {
+      signature: hexlify(signatureBuffer),
+      modulus: hexlify(modulus),
+      exponent: hexlify(exponent),
+      expectedHash,
+    };
 
     if (
       !rsaValues.signature ||
@@ -52,7 +76,7 @@ describe("RSAVerifier", function () {
       !rsaValues.exponent ||
       !rsaValues.expectedHash
     ) {
-      throw new Error("Missing RSA values from script output");
+      throw new Error("Missing RSA values from crypto module");
     }
   });
 
@@ -60,19 +84,17 @@ describe("RSAVerifier", function () {
     const { signature, exponent, modulus, expectedHash } = rsaValues;
 
     const result = await verifier.verifyRSA(
-      getBytes(signature),   // hex string to bytes
-      expectedHash,          
-      getBytes(modulus),     // hex string to bytes
-      getBytes(exponent)     // hex string to bytes
+      getBytes(signature),
+      expectedHash,
+      getBytes(modulus),
+      getBytes(exponent)
     );
 
     expect(result).to.equal(true);
   });
+   
 
-  /**
-  * @notice Signature and key pairs are generated for specific message but we passed expectedHash for another message so verify of valid message should fail
-  */
-
+  // testing with wrong hash message
   it("should fail when passing the wrong expectedHash", async () => {
     const { signature, exponent, modulus } = rsaValues;
 
@@ -87,6 +109,7 @@ describe("RSAVerifier", function () {
     expect(result).to.equal(false);
   });
 });
+
 
 
 
