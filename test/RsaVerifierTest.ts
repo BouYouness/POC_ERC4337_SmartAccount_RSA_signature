@@ -1,41 +1,50 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { createSign, generateKeyPairSync } from "crypto";
+import { generateKeyPairSync, createSign } from "crypto";
 import { sha256 } from "@ethersproject/sha2";
 import { toUtf8Bytes } from "@ethersproject/strings";
-import { getBytes, hexlify } from "ethers";
-import forge from "node-forge";
+import { arrayify as getBytes, hexlify } from "@ethersproject/bytes";
+import * as asn1 from "asn1.js";
 
 describe("RSAVerifier", function () {
   let verifier: any;
 
-  let rsaValues: {
-    signature: string;
-    modulus: string;
-    exponent: string;
-    expectedHash: string;
-  };
+  // ASN.1 RSAPublicKey structure to decode the PEM
+  const RSAPublicKeyASN = asn1.define("RSAPublicKey", function (this: any) {
+    this.seq().obj(
+      this.key("n").int(), // modulus
+      this.key("e").int()  // exponent
+    );
+  });
 
-  // Helper function to extract modulus and exponent
-  function extractModulus_Exponent(pemPublicKey: string): {
-    modulus: Buffer;
-    exponent: Buffer;
+  // Helper function to convert PEM public key to modulus and exponent hex
+  function extractModulusExponentFromPem(pem: string): {
+    modulusHex: string;
+    exponentHex: string;
   } {
-    const forgePublicKey = forge.pki.publicKeyFromPem(pemPublicKey);
-    const nBytes = forge.util.hexToBytes(forgePublicKey.n.toString(16));
-    const eBytes = forge.util.hexToBytes(forgePublicKey.e.toString(16));
+    
+    //clears out the header, footer, and whitespace from the PEM key
+    const pemBody = pem
+      .replace("-----BEGIN RSA PUBLIC KEY-----", "")  
+      .replace("-----END RSA PUBLIC KEY-----", "")
+      .replace(/\s+/g, "");
 
-    const modulus = Buffer.from(nBytes, "binary");
-    const exponent = Buffer.from(eBytes, "binary");
+    const der = Buffer.from(pemBody, "base64");
+    const decoded = RSAPublicKeyASN.decode(der, "der");
 
-    return { modulus, exponent };
+    const modulusHex = hexlify(decoded.n.toBuffer());
+    const exponentHex = hexlify(decoded.e.toBuffer());
+
+    return { modulusHex, exponentHex };
   }
 
   before(async () => {
     const RSAVerifierFactory = await ethers.getContractFactory("RSAVerifier");
     verifier = await RSAVerifierFactory.deploy();
     await verifier.waitForDeployment();
+  });
 
+  it("should verify a valid RSA signature", async () => {
     // Generate RSA key pair
     const { publicKey, privateKey } = generateKeyPairSync("rsa", {
       modulusLength: 2048,
@@ -50,166 +59,175 @@ describe("RSAVerifier", function () {
       },
     });
 
-    // Message for signing
     const message = "hi man";
     const expectedHash = sha256(toUtf8Bytes(message));
 
-    // Create our signature
     const signer = createSign("RSA-SHA256");
     signer.update(message);
     signer.end();
     const signatureBuffer = signer.sign(privateKey);
+    const signature = hexlify(signatureBuffer);
 
-    // Extract modulus and exponent using the helper function 
-    const { modulus, exponent } = extractModulus_Exponent(publicKey);
-
-    rsaValues = {
-      signature: hexlify(signatureBuffer),
-      modulus: hexlify(modulus),
-      exponent: hexlify(exponent),
-      expectedHash,
-    };
-
-    if (
-      !rsaValues.signature ||
-      !rsaValues.modulus ||
-      !rsaValues.exponent ||
-      !rsaValues.expectedHash
-    ) {
-      throw new Error("Missing RSA values from crypto module");
-    }
-  });
-
-  it("should verify a valid RSA signature", async () => {
-    const { signature, exponent, modulus, expectedHash } = rsaValues;
+    const { modulusHex, exponentHex } = extractModulusExponentFromPem(publicKey);
 
     const result = await verifier.verifyRSA(
       expectedHash,
       getBytes(signature),
-      getBytes(exponent),
-      getBytes(modulus)
+      getBytes(exponentHex),
+      getBytes(modulusHex)
     );
 
     expect(result).to.equal(true);
   });
-   
 
-  // testing with wrong hash message
   it("should fail when passing the wrong expectedHash", async () => {
-    const { signature, exponent, modulus } = rsaValues;
+    // Generate RSA key pair
+    const { publicKey, privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      publicExponent: 0x10001, // 65537
+      publicKeyEncoding: {
+        type: "pkcs1",
+        format: "pem",
+      },
+      privateKeyEncoding: {
+        type: "pkcs1",
+        format: "pem",
+      },
+    });
 
-    const wrongExpectedHash = sha256(toUtf8Bytes("hello"));
+    const message = "hi man";
+    const expectedHash = sha256(toUtf8Bytes(message));
+
+    const signer = createSign("RSA-SHA256");
+    signer.update(message);
+    signer.end();
+    const signatureBuffer = signer.sign(privateKey);
+    const signature = hexlify(signatureBuffer);
+
+    const { modulusHex, exponentHex } = extractModulusExponentFromPem(publicKey);
+
+    const wrongExpectedHash = sha256(toUtf8Bytes("hello")); // hash for other message
+
     const result = await verifier.verifyRSA(
       wrongExpectedHash,
       getBytes(signature),
-      getBytes(exponent),
-      getBytes(modulus)
+      getBytes(exponentHex),
+      getBytes(modulusHex)
     );
 
     expect(result).to.equal(false);
   });
 });
 
-
 describe("RsaTwoMessagesVerifier", function () {
   let verifier: any;
 
-  let signature1: string;
-  let signature2: string;
-  let expectedHash1: string;
-  let expectedHash2: string;
-  let modulusHex: string;
-  let exponentHex: string;
+  // ASN.1 RSAPublicKey structure to decode the PEM
+  const RSAPublicKeyASN = asn1.define("RSAPublicKey", function (this: any) {
+    this.seq().obj(
+      this.key("n").int(), // modulus
+      this.key("e").int()  // exponent
+    );
+  });
 
-  // Helper to extract modulus and exponent
-  function extractModulus_Exponent(pemPublicKey: string): {
-    modulus: Buffer;
-    exponent: Buffer;
+  // Helper function to convert PEM public key to modulus and exponent hex
+  function extractModulusExponentFromPem(pem: string): {
+    modulusHex: string;
+    exponentHex: string;
   } {
-    const forgePublicKey = forge.pki.publicKeyFromPem(pemPublicKey);
-    const nBytes = forge.util.hexToBytes(forgePublicKey.n.toString(16));
-    const eBytes = forge.util.hexToBytes(forgePublicKey.e.toString(16));
+    const pemBody = pem
+      .replace("-----BEGIN RSA PUBLIC KEY-----", "")
+      .replace("-----END RSA PUBLIC KEY-----", "")
+      .replace(/\s+/g, "");
 
-    const modulus = Buffer.from(nBytes, "binary");
-    const exponent = Buffer.from(eBytes, "binary");
+    const der = Buffer.from(pemBody, "base64");
+    const decoded = RSAPublicKeyASN.decode(der, "der");
 
-    return { modulus, exponent };
+    const modulusHex = hexlify(decoded.n.toBuffer());
+    const exponentHex = hexlify(decoded.e.toBuffer());
+
+    return { modulusHex, exponentHex };
   }
 
   before(async () => {
     const RSAVerifierFactory = await ethers.getContractFactory("RSAVerifier");
     verifier = await RSAVerifierFactory.deploy();
     await verifier.waitForDeployment();
+  });
 
+  it("should verify multiple messages with their respective signatures and fail if it's not their signatures", async () => {
+    // Generate RSA key pair
     const { publicKey, privateKey } = generateKeyPairSync("rsa", {
       modulusLength: 2048,
-      publicExponent: 0x10001,
-      publicKeyEncoding: { type: "pkcs1", format: "pem" },
-      privateKeyEncoding: { type: "pkcs1", format: "pem" },
+      publicExponent: 0x10001, // 65537
+      publicKeyEncoding: {
+        type: "pkcs1",
+        format: "pem",
+      },
+      privateKeyEncoding: {
+        type: "pkcs1",
+        format: "pem",
+      },
     });
 
-    // Message 1 and Signature
+    const { modulusHex, exponentHex } = extractModulusExponentFromPem(publicKey);
+
+    // Message 1
     const message1 = "hey hello";
-    expectedHash1 = sha256(toUtf8Bytes(message1));
+    const expectedHash1 = sha256(toUtf8Bytes(message1));
     const signer1 = createSign("RSA-SHA256");
     signer1.update(message1);
     signer1.end();
-    signature1 = hexlify(signer1.sign(privateKey));
+    const signature1 = hexlify(signer1.sign(privateKey));
 
-    // Message 2 and Signature
+    // Message 2
     const message2 = "hey hi";
-    expectedHash2 = sha256(toUtf8Bytes(message2));
+    const expectedHash2 = sha256(toUtf8Bytes(message2));
     const signer2 = createSign("RSA-SHA256");
     signer2.update(message2);
     signer2.end();
-    signature2 = hexlify(signer2.sign(privateKey));
+    const signature2 = hexlify(signer2.sign(privateKey));
 
-    // Extract modulus and exponent
-    const { modulus, exponent } = extractModulus_Exponent(publicKey);
-    modulusHex = hexlify(modulus);
-    exponentHex = hexlify(exponent);
-  });
-
-  it("should verify message1 with signature1", async () => {
-    const result = await verifier.verifyRSA(
+    // Verify message1 with signature1
+    const result1 = await verifier.verifyRSA(
       expectedHash1,
       getBytes(signature1),
       getBytes(exponentHex),
       getBytes(modulusHex)
     );
-    expect(result).to.equal(true);
-  });
 
-  it("should verify message2 with signature2", async () => {
-    const result = await verifier.verifyRSA(
+    expect(result1).to.equal(true);
+
+    // Verify message2 with signature2
+    const result2 = await verifier.verifyRSA(
       expectedHash2,
       getBytes(signature2),
       getBytes(exponentHex),
       getBytes(modulusHex)
     );
-    expect(result).to.equal(true);
-  });
 
-  it("should fail to verify message1 with signature2", async () => {
-    const result = await verifier.verifyRSA(
-    expectedHash1,
+    expect(result2).to.equal(true);
+
+    // Verify message1 with signature2 should fail
+    const result3 = await verifier.verifyRSA(
+      expectedHash1,
       getBytes(signature2),
       getBytes(exponentHex),
       getBytes(modulusHex)
     );
-    expect(result).to.equal(false);
-  });
+    expect(result3).to.equal(false);
 
-  it("should fail to verify message2 with signature1", async () => {
-    const result = await verifier.verifyRSA(
+    // Verify message2 with signature1 should fail
+    const result4 = await verifier.verifyRSA(
       expectedHash2,
       getBytes(signature1),
       getBytes(exponentHex),
       getBytes(modulusHex)
     );
-    expect(result).to.equal(false);
+    expect(result4).to.equal(false);
   });
 });
+
 
 
 
