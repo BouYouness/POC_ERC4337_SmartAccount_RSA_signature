@@ -2,7 +2,6 @@
 pragma solidity ^0.8.20;
 
 library RSALibrary {
-    
     /**
      * @notice Verifies RSA signature using modular exponentiation.
      * @param signature The RSA signature.
@@ -11,7 +10,7 @@ library RSALibrary {
      * @param exponent RSA exponent.
      * @return True if valid, false otherwise.
      */
-     
+
     function rsaVerify(
         bytes memory signature,
         bytes32 expectedHash,
@@ -29,8 +28,7 @@ library RSALibrary {
         return resultHash == expectedHash;
     }
 
-    
-     //Perform modular exponentiation using Ethereum precompile.
+    //Perform modular exponentiation using Ethereum precompile.
 
     function modexp(
         bytes memory base,
@@ -53,7 +51,16 @@ library RSALibrary {
         output = new bytes(modLen);
 
         assembly {
-            if iszero(staticcall(not(0), 5, add(input, 32), mload(input), add(output, 32), modLen)) {
+            if iszero(
+                staticcall(
+                    not(0),
+                    5,
+                    add(input, 32),
+                    mload(input),
+                    add(output, 32),
+                    modLen
+                )
+            ) {
                 revert(0, 0)
             }
         }

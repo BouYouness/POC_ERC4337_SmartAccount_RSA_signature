@@ -15,10 +15,3 @@ node_modules
 
 # Hardhat Ignition default folder for deployments against a local node
 ignition/deployments/chain-31337
-
-#files in generated
-generated/hash.bin
-generated/message.txt
-generated/private_key.pem
-generated/public_key.pem
-generated/signature.bin

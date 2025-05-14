@@ -1,1 +1,2 @@
 remappings = ['@account-abstraction/contracts=../../node_modules/@account-abstraction/contracts']
+remappings = ['@openzeppelin/contracts=../../node_modules/@openzeppelin/contracts']
