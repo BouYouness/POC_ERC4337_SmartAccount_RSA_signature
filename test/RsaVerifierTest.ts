@@ -39,7 +39,7 @@ describe("RSAVerifier", function () {
   }
 
   before(async () => {
-    const RSAVerifierFactory = await ethers.getContractFactory("RSAVerifier");
+    const RSAVerifierFactory = await ethers.getContractFactory("RSAVerifierOPZep");
     verifier = await RSAVerifierFactory.deploy();
     await verifier.waitForDeployment();
   });
@@ -150,7 +150,7 @@ describe("RsaTwoMessagesVerifier", function () {
   }
 
   before(async () => {
-    const RSAVerifierFactory = await ethers.getContractFactory("RSAVerifier");
+    const RSAVerifierFactory = await ethers.getContractFactory("RSAVerifierOPZep");
     verifier = await RSAVerifierFactory.deploy();
     await verifier.waitForDeployment();
   });

@@ -6,7 +6,6 @@ import "@account-abstraction/contracts/interfaces/PackedUserOperation.sol";
 import "./RSALibrary.sol";
 
 abstract contract RSAAccount is BaseAccount {
-
     bytes public modulus;
     bytes public exponent;
 
@@ -15,21 +14,16 @@ abstract contract RSAAccount is BaseAccount {
      * @param _modulus The RSA modulus part of the public key.
      * @param _exponent The RSA exponent part of the public key.
      */
-    constructor(
-        bytes memory _modulus,
-        bytes memory _exponent
-    ) {
+    constructor(bytes memory _modulus, bytes memory _exponent) {
         modulus = _modulus;
         exponent = _exponent;
     }
 
-    
     function validateUserOp(
         PackedUserOperation calldata userOp,
         bytes32 userOpHash,
         uint256 /* ETH gas EntryPoint expects you to pay */
     ) external view override returns (uint256 validationData) {
-
         // SECURITY: Verify only EntryPoint can call this
         _requireFromEntryPoint();
 
@@ -45,10 +39,8 @@ abstract contract RSAAccount is BaseAccount {
         );
 
         if (!valid) {
-            return 1;  // Signature invalid 🚫
+            return 1; // Signature invalid 🚫
         }
-        return 0;      // Signature valid 
+        return 0; // Signature valid
     }
 }
-
-
